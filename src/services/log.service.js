@@ -24,4 +24,26 @@ const logActivity = async (userId, action, details = {}) => {
   }
 };
 
-module.exports = { logActivity };
+const logRequestActivity = async (req, userId, action, details = {}) => {
+  const ip =
+    req.ip ||
+    req.headers["x-forwarded-for"] ||
+    (req.connection && req.connection.remoteAddress) ||
+    null;
+
+  const userAgent = req.headers["user-agent"] || null;
+
+  const requestMeta = {
+    ip,
+    userAgent,
+    path: req.originalUrl,
+    method: req.method,
+  };
+
+  return logActivity(userId, action, {
+    ...details,
+    request: requestMeta,
+  });
+};
+
+module.exports = { logActivity, logRequestActivity };

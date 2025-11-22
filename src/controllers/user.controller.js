@@ -1,11 +1,17 @@
 const User = require("../models/user.model");
 const Role = require("../models/role.model");
-const { logActivity } = require("../services/log.service");
+const { logRequestActivity } = require("../services/log.service");
 
 // @desc    Get all users
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find().select("-password");
+    if (req.user && req.user.id) {
+      await logRequestActivity(req, req.user.id, "VIEW_ALL_USERS", {
+        count: users.length,
+      });
+    }
+
     res.json(users);
   } catch (error) {
     console.error(error.message);
@@ -34,7 +40,7 @@ exports.updateUserRoles = async (req, res) => {
     user.roles = roleDocs.map((role) => role._id);
     const updatedUser = await user.save();
 
-    await logActivity(req.user.id, "UPDATE_USER_ROLES", {
+    await logRequestActivity(req, req.user.id, "UPDATE_USER_ROLES", {
       targetUserId: updatedUser._id,
       roles,
     });
@@ -65,7 +71,7 @@ exports.updateUserLockStatus = async (req, res) => {
     user.isLocked = isLocked;
     const updatedUser = await user.save();
 
-    await logActivity(req.user.id, "UPDATE_USER_LOCK_STATUS", {
+    await logRequestActivity(req, req.user.id, "UPDATE_USER_LOCK_STATUS", {
       targetUserId: updatedUser._id,
       isLocked,
     });
@@ -87,6 +93,12 @@ exports.getUserById = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+    if (req.user && req.user.id) {
+      await logRequestActivity(req, req.user.id, "VIEW_USER", {
+        targetUserId: user._id,
+      });
+    }
+
     res.json(user);
   } catch (error) {
     console.error(error.message);

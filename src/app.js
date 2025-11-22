@@ -3,9 +3,12 @@ const express = require("express");
 const errorHandler = require("./middleware/error.handler");
 const cookieParser = require("cookie-parser");
 const securityMiddleware = require("./middleware/security.middleware");
+const enforceHttps = require("./middleware/https.middleware");
 const app = express();
 
 // Middleware
+app.set("trust proxy", 1);
+app.use(enforceHttps);
 app.use(securityMiddleware);
 app.use(express.json());
 app.use(cookieParser());

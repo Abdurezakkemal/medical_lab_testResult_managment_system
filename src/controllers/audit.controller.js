@@ -1,5 +1,6 @@
 const AuditLog = require("../models/auditLog.model");
 const { decrypt } = require("../services/encryption.service");
+const { logRequestActivity } = require("../services/log.service");
 
 // Get decrypted audit logs (Admin-only via RBAC on the route)
 exports.getAuditLogs = async (req, res) => {
@@ -10,6 +11,7 @@ exports.getAuditLogs = async (req, res) => {
     if (limit < 1) limit = 20;
 
     const { userId, action, from, to } = req.query;
+    const includeMeta = req.query.includeMeta === "true";
 
     const logs = await AuditLog.find().sort({ createdAt: -1 });
 
@@ -32,7 +34,9 @@ exports.getAuditLogs = async (req, res) => {
       };
     });
 
-    let filtered = parsed;
+    let filtered = includeMeta
+      ? parsed
+      : parsed.filter((log) => log.action !== "AUDIT_LOGS_VIEWED");
 
     if (userId) {
       filtered = filtered.filter((log) => log.userId === userId);
@@ -80,6 +84,14 @@ exports.getAuditLogs = async (req, res) => {
     const totalPages = Math.max(1, Math.ceil(total / limit));
     const startIndex = (page - 1) * limit;
     const data = filtered.slice(startIndex, startIndex + limit);
+
+    if (req.user && req.user.id) {
+      await logRequestActivity(req, req.user.id, "AUDIT_LOGS_VIEWED", {
+        page,
+        limit,
+        total,
+      });
+    }
 
     res.json({ page, limit, total, totalPages, data });
   } catch (error) {

@@ -1,5 +1,5 @@
 const TestResult = require("../models/testResult.model");
-const { logActivity } = require("../services/log.service");
+const { logRequestActivity } = require("../services/log.service");
 
 // @desc    Lab Tech test route for uploading results
 exports.uploadResult = (req, res) => {
@@ -25,7 +25,7 @@ exports.createTestResult = async (req, res) => {
     const testResult = await newTestResult.save();
 
     // Log the event
-    await logActivity(req.user.id, "CREATE_TEST_RESULT", {
+    await logRequestActivity(req, req.user.id, "CREATE_TEST_RESULT", {
       resultId: testResult._id,
       patientId,
     });
@@ -59,7 +59,7 @@ exports.shareTestResult = async (req, res) => {
     await testResult.save();
 
     // Log the event
-    await logActivity(req.user.id, "SHARE_TEST_RESULT", {
+    await logRequestActivity(req, req.user.id, "SHARE_TEST_RESULT", {
       resultId: testResult._id,
       sharedWith: userIdToShareWith,
     });
@@ -76,6 +76,13 @@ exports.getTestResult = async (req, res) => {
   try {
     const testResult = await TestResult.findById(req.params.id);
     // The middleware has already performed the MAC check
+    if (testResult && req.user && req.user.id) {
+      await logRequestActivity(req, req.user.id, "VIEW_TEST_RESULT", {
+        resultId: testResult._id,
+        patientId: testResult.patientId,
+      });
+    }
+
     res.json(testResult);
   } catch (error) {
     console.error(error.message);
@@ -87,6 +94,12 @@ exports.getTestResult = async (req, res) => {
 exports.getAllTestResults = async (req, res) => {
   try {
     const results = await TestResult.find();
+    if (req.user && req.user.id) {
+      await logRequestActivity(req, req.user.id, "VIEW_ALL_TEST_RESULTS", {
+        count: results.length,
+      });
+    }
+
     res.json(results);
   } catch (error) {
     console.error(error.message);
@@ -128,7 +141,7 @@ exports.updateTestResult = async (req, res) => {
 
     const updated = await testResult.save();
 
-    await logActivity(req.user.id, "UPDATE_TEST_RESULT", {
+    await logRequestActivity(req, req.user.id, "UPDATE_TEST_RESULT", {
       resultId: updated._id,
     });
 
@@ -155,7 +168,7 @@ exports.deleteTestResult = async (req, res) => {
 
     await testResult.deleteOne();
 
-    await logActivity(req.user.id, "DELETE_TEST_RESULT", {
+    await logRequestActivity(req, req.user.id, "DELETE_TEST_RESULT", {
       resultId: testResult._id,
     });
 

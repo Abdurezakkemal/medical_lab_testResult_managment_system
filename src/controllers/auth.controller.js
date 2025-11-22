@@ -5,8 +5,9 @@ const bcrypt = require("bcryptjs");
 const speakeasy = require("speakeasy");
 const qrcode = require("qrcode");
 const crypto = require("crypto");
-const { logActivity } = require("../services/log.service");
+const { logRequestActivity } = require("../services/log.service");
 const sendEmail = require("../services/email.service");
+const { sendSecurityAlert } = require("../services/alert.service");
 
 // @desc    Set up MFA for the authenticated user
 exports.setupMfa = async (req, res) => {
@@ -19,6 +20,10 @@ exports.setupMfa = async (req, res) => {
     const secret = speakeasy.generateSecret({ length: 20 });
     user.mfaSecret = secret.base32;
     await user.save();
+
+    await logRequestActivity(req, user.id, "MFA_SETUP_INITIATED", {
+      email: user.email,
+    });
 
     qrcode.toDataURL(secret.otpauth_url, (err, data_url) => {
       if (err) {
@@ -74,6 +79,10 @@ exports.loginVerifyMfa = async (req, res) => {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       });
 
+      await logRequestActivity(req, user.id, "MFA_LOGIN_COMPLETED", {
+        email: user.email,
+      });
+
       res.status(200).json({ accessToken });
     } else {
       res.status(400).json({ message: "Invalid MFA token" });
@@ -103,6 +112,9 @@ exports.verifyMfa = async (req, res) => {
     if (verified) {
       user.mfaEnabled = true;
       await user.save();
+      await logRequestActivity(req, user.id, "MFA_ENABLED", {
+        email: user.email,
+      });
       res.json({ message: "MFA enabled successfully" });
     } else {
       res.status(400).json({ message: "Invalid MFA token" });
@@ -135,7 +147,9 @@ exports.verifyEmail = async (req, res) => {
     user.emailVerificationTokenExpires = undefined;
     await user.save();
 
-    logActivity(user.id, "EMAIL_VERIFIED", { email: user.email });
+    await logRequestActivity(req, user.id, "EMAIL_VERIFIED", {
+      email: user.email,
+    });
 
     res.status(200).json({ message: "Email verified successfully." });
   } catch (error) {
@@ -154,10 +168,13 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    const defaultRole = await Role.findOne({ name: "Patient" });
+    let defaultRole = await Role.findOne({ name: "Patient" });
     if (!defaultRole) {
       // This should not happen if the seeder has run
-      return res.status(500).json({ message: "Default role not found" });
+      defaultRole = await Role.create({
+        name: "Patient",
+        permissions: ["read_own_data"],
+      });
     }
 
     // Create new user
@@ -189,6 +206,10 @@ exports.register = async (req, res) => {
       // Save user after sending email
       await user.save({ validateBeforeSave: false });
 
+      await logRequestActivity(req, user.id, "USER_REGISTERED", {
+        email: user.email,
+      });
+
       res.status(201).json({
         message:
           "Registration successful. Please check your email to verify your account.",
@@ -218,6 +239,10 @@ exports.logout = async (req, res) => {
     if (user) {
       user.refreshToken = null;
       await user.save();
+
+      await logRequestActivity(req, user.id, "USER_LOGOUT", {
+        email: user.email,
+      });
     }
 
     res.clearCookie("jwt", {
@@ -309,7 +334,9 @@ exports.login = async (req, res) => {
     user.loginAttempts = 0;
     await user.save();
 
-    await logActivity(user.id, "USER_LOGIN", { email: user.email });
+    await logRequestActivity(req, user.id, "USER_LOGIN", {
+      email: user.email,
+    });
 
     if (user.mfaEnabled) {
       const mfaToken = jwt.sign(
@@ -342,6 +369,44 @@ exports.login = async (req, res) => {
     });
 
     res.status(200).json({ accessToken });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send("Server error");
+  }
+};
+
+exports.changePassword = async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isCurrentMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentMatch) {
+      return res.status(400).json({ message: "Current password is incorrect" });
+    }
+
+    const isSameAsOld = await bcrypt.compare(newPassword, user.password);
+    if (isSameAsOld) {
+      return res.status(400).json({
+        message: "New password must be different from the current password",
+      });
+    }
+
+    user.password = newPassword;
+    user.loginAttempts = 0;
+    user.isLocked = false;
+    user.refreshToken = null;
+    await user.save();
+
+    await logRequestActivity(req, user.id, "PASSWORD_CHANGED", {
+      email: user.email,
+    });
+
+    res.status(200).json({ message: "Password changed successfully" });
   } catch (error) {
     console.error(error.message);
     res.status(500).send("Server error");

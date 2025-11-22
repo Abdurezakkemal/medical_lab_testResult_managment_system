@@ -5,6 +5,7 @@ const authMiddleware = require("../../middleware/auth.middleware");
 const {
   validate,
   registerSchema,
+  changePasswordSchema,
 } = require("../../middleware/validation.middleware");
 const verifyCaptcha = require("../../middleware/captcha.middleware");
 
@@ -37,6 +38,16 @@ router.get("/verifyemail/:token", authController.verifyEmail);
 // @desc    Authenticate user & get token
 // @access  Public
 router.post("/login", verifyCaptcha, authController.login);
+
+// @route   POST /api/v1/auth/change-password
+// @desc    Change password for the authenticated user
+// @access  Private
+router.post(
+  "/change-password",
+  authMiddleware,
+  validate(changePasswordSchema),
+  authController.changePassword
+);
 
 // @route   POST /api/v1/auth/login/mfa/verify
 // @desc    Verify the MFA token during login

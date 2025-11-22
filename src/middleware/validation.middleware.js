@@ -16,6 +16,18 @@ const registerSchema = z.object({
   }),
 });
 
+const changePasswordSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(1, {
+      message: "Current password is required",
+    }),
+    newPassword: z.string().regex(strongPassword, {
+      message:
+        "Password must be at least 12 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.",
+    }),
+  }),
+});
+
 const validate = (schema) => (req, res, next) => {
   try {
     schema.parse({
@@ -29,4 +41,4 @@ const validate = (schema) => (req, res, next) => {
   }
 };
 
-module.exports = { validate, registerSchema };
+module.exports = { validate, registerSchema, changePasswordSchema };
