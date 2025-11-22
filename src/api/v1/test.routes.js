@@ -4,9 +4,9 @@ const testController = require("../../controllers/test.controller");
 const authMiddleware = require("../../middleware/auth.middleware");
 const rbacMiddleware = require("../../middleware/rbac.middleware");
 const rubacMiddleware = require("../../middleware/rubac.middleware");
-// const macMiddleware = require("../../middleware/mac.middleware");
+const macMiddleware = require("../../middleware/mac.middleware");
 const abacMiddleware = require("../../middleware/abac.middleware");
-// const dacMiddleware = require("../../middleware/dac.middleware");
+const dacMiddleware = require("../../middleware/dac.middleware");
 
 // @route   POST /api/v1/tests
 // @desc    Create a new test result
@@ -18,14 +18,24 @@ router.post(
   testController.createTestResult
 );
 
+// @route   GET /api/v1/tests
+// @desc    Get all test results
+// @access  Private (Admin via permission)
+router.get(
+  "/",
+  authMiddleware,
+  rbacMiddleware(["view_all_results"]),
+  testController.getAllTestResults
+);
+
 // @route   GET /api/v1/tests/:id
 // @desc    Get a specific test result
 // @access  Private (MAC enforced)
 router.get(
   "/:id",
   authMiddleware,
-  // macMiddleware,
-  // dacMiddleware, // DAC runs before ABAC
+  macMiddleware,
+  dacMiddleware, // DAC runs before ABAC
   (req, res, next) => {
     // This function conditionally skips ABAC
     if (req.bypassAbac) {
@@ -34,6 +44,40 @@ router.get(
     abacMiddleware(req, res, next);
   },
   testController.getTestResult
+);
+
+// @route   PUT /api/v1/tests/:id
+// @desc    Update a specific test result
+// @access  Private (MAC + DAC + ABAC + DAC write/owner enforcement in controller)
+router.put(
+  "/:id",
+  authMiddleware,
+  macMiddleware,
+  dacMiddleware,
+  (req, res, next) => {
+    if (req.bypassAbac) {
+      return next();
+    }
+    abacMiddleware(req, res, next);
+  },
+  testController.updateTestResult
+);
+
+// @route   DELETE /api/v1/tests/:id
+// @desc    Delete a specific test result
+// @access  Private (MAC + DAC + ABAC + owner enforcement in controller)
+router.delete(
+  "/:id",
+  authMiddleware,
+  macMiddleware,
+  dacMiddleware,
+  (req, res, next) => {
+    if (req.bypassAbac) {
+      return next();
+    }
+    abacMiddleware(req, res, next);
+  },
+  testController.deleteTestResult
 );
 
 // @route   POST /api/v1/tests/upload

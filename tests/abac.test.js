@@ -38,18 +38,21 @@ describe("ABAC Middleware", () => {
       email: "abac_admin@test.com",
       password: "password",
       attributes: { department: "Administration" },
+      clearanceLevel: 5,
     }).save();
     const doctorUser = await new User({
       username: "abac_doctor",
       email: "abac_doctor@test.com",
       password: "password",
       attributes: { department: "Cardiology" },
+      clearanceLevel: 3,
     }).save();
     const otherDoctorUser = await new User({
       username: "abac_other_doctor",
       email: "abac_other_doctor@test.com",
       password: "password",
       attributes: { department: "Neurology" },
+      clearanceLevel: 3,
     }).save();
 
     adminToken = jwt.sign(

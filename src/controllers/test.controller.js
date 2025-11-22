@@ -82,3 +82,86 @@ exports.getTestResult = async (req, res) => {
     res.status(500).send("Server error");
   }
 };
+
+// @desc    Get all test results (Admin only via RBAC)
+exports.getAllTestResults = async (req, res) => {
+  try {
+    const results = await TestResult.find();
+    res.json(results);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send("Server error");
+  }
+};
+
+// @desc    Update a test result (owner or shared-with with write permission)
+exports.updateTestResult = async (req, res) => {
+  try {
+    const testResult = await TestResult.findById(req.params.id);
+    if (!testResult) {
+      return res.status(404).json({ message: "Test result not found" });
+    }
+
+    const userId = req.user.id;
+    const isOwner = testResult.owner.toString() === userId;
+    const hasWriteAccess = testResult.sharedWith.some(
+      (share) =>
+        share.userId.toString() === userId &&
+        Array.isArray(share.permissions) &&
+        share.permissions.includes("write")
+    );
+
+    if (!isOwner && !hasWriteAccess) {
+      return res.status(403).json({
+        message:
+          "Forbidden: Only the owner or users with write access can update this result",
+      });
+    }
+
+    const { testName, resultData, sensitivityLevel, department } = req.body;
+
+    if (typeof testName !== "undefined") testResult.testName = testName;
+    if (typeof resultData !== "undefined") testResult.resultData = resultData;
+    if (typeof sensitivityLevel !== "undefined")
+      testResult.sensitivityLevel = sensitivityLevel;
+    if (typeof department !== "undefined") testResult.department = department;
+
+    const updated = await testResult.save();
+
+    await logActivity(req.user.id, "UPDATE_TEST_RESULT", {
+      resultId: updated._id,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send("Server error");
+  }
+};
+
+// @desc    Delete a test result (owner only)
+exports.deleteTestResult = async (req, res) => {
+  try {
+    const testResult = await TestResult.findById(req.params.id);
+    if (!testResult) {
+      return res.status(404).json({ message: "Test result not found" });
+    }
+
+    if (testResult.owner.toString() !== req.user.id) {
+      return res.status(403).json({
+        message: "Forbidden: Only the owner can delete this result",
+      });
+    }
+
+    await testResult.deleteOne();
+
+    await logActivity(req.user.id, "DELETE_TEST_RESULT", {
+      resultId: testResult._id,
+    });
+
+    res.json({ message: "Test result deleted successfully" });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send("Server error");
+  }
+};

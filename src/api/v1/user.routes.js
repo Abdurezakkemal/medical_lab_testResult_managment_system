@@ -19,4 +19,18 @@ router.get(
   userController.getUserById
 );
 
+router.patch(
+  "/:id/roles",
+  authMiddleware,
+  rbac(["Admin"]),
+  userController.updateUserRoles
+);
+
+router.patch(
+  "/:id/lock",
+  authMiddleware,
+  rbac(["Admin"]),
+  userController.updateUserLockStatus
+);
+
 module.exports = router;
