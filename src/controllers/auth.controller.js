@@ -32,6 +32,55 @@ exports.setupMfa = async (req, res) => {
   }
 };
 
+// @desc    Verify the MFA token during login
+exports.loginVerifyMfa = async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const verified = speakeasy.totp.verify({
+      secret: user.mfaSecret,
+      encoding: "base32",
+      token,
+    });
+
+    if (verified) {
+      // MFA token is valid, complete the login process
+      const accessToken = jwt.sign(
+        { user: { id: user.id } },
+        process.env.JWT_SECRET,
+        { expiresIn: "15m" }
+      );
+      const refreshToken = jwt.sign(
+        { user: { id: user.id } },
+        process.env.REFRESH_TOKEN_SECRET,
+        { expiresIn: "7d" }
+      );
+
+      user.refreshToken = refreshToken;
+      await user.save();
+
+      res.cookie("jwt", refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
+
+      res.status(200).json({ accessToken });
+    } else {
+      res.status(400).json({ message: "Invalid MFA token" });
+    }
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send("Server error");
+  }
+};
+
 // @desc    Verify the MFA token and enable MFA
 exports.verifyMfa = async (req, res) => {
   const { token } = req.body;
@@ -157,6 +206,63 @@ exports.register = async (req, res) => {
   }
 };
 
+// @desc    Logout user
+exports.logout = async (req, res) => {
+  const cookies = req.cookies;
+  if (!cookies?.jwt) return res.sendStatus(204); // No content
+
+  const refreshToken = cookies.jwt;
+
+  try {
+    const user = await User.findOne({ refreshToken });
+    if (user) {
+      user.refreshToken = null;
+      await user.save();
+    }
+
+    res.clearCookie("jwt", {
+      httpOnly: true,
+      sameSite: "strict",
+      secure: process.env.NODE_ENV === "production",
+    });
+    res.sendStatus(204);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send("Server error");
+  }
+};
+
+// @desc    Refresh access token
+exports.refreshToken = async (req, res) => {
+  const cookies = req.cookies;
+  if (!cookies?.jwt) return res.sendStatus(401);
+
+  const refreshToken = cookies.jwt;
+
+  try {
+    const user = await User.findOne({ refreshToken });
+    if (!user) return res.sendStatus(403);
+
+    jwt.verify(
+      refreshToken,
+      process.env.REFRESH_TOKEN_SECRET,
+      (err, decoded) => {
+        if (err || user.id !== decoded.user.id) return res.sendStatus(403);
+
+        const accessToken = jwt.sign(
+          { user: { id: decoded.user.id } },
+          process.env.JWT_SECRET,
+          { expiresIn: "15m" }
+        );
+        res.json({ accessToken });
+      }
+    );
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send("Server error");
+  }
+};
+
 // @desc    Authenticate user & get token
 exports.login = async (req, res) => {
   const { email, password } = req.body;
@@ -214,19 +320,37 @@ exports.login = async (req, res) => {
 
     await logActivity(user.id, "USER_LOGIN", { email: user.email });
 
-    if (!user.isVerified) {
-      console.log(`[AUTH] Email not verified for ${email}. Denying access.`);
-      return res
-        .status(401)
-        .json({ message: "Please verify your email before logging in." });
+    if (user.mfaEnabled) {
+      const mfaToken = jwt.sign(
+        { user: { id: user.id, mfa: "pending" } },
+        process.env.JWT_SECRET,
+        { expiresIn: "10m" }
+      );
+      return res.status(200).json({ mfaRequired: true, mfaToken });
     }
 
-    const payload = { user: { id: user.id } };
-    const token = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: "1h",
+    const accessToken = jwt.sign(
+      { user: { id: user.id } },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+    const refreshToken = jwt.sign(
+      { user: { id: user.id } },
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    res.cookie("jwt", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    res.status(200).json({ token });
+    res.status(200).json({ accessToken });
   } catch (error) {
     console.error(error.message);
     res.status(500).send("Server error");

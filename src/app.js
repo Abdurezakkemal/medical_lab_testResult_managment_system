@@ -1,9 +1,12 @@
+require("./config");
 const express = require("express");
 const errorHandler = require("./middleware/error.handler");
+const cookieParser = require("cookie-parser");
 const app = express();
 
 // Middleware
 app.use(express.json());
+app.use(cookieParser());
 
 // API Routes
 app.use("/api/v1/auth", require("./api/v1/auth.routes"));

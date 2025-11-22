@@ -38,4 +38,19 @@ router.get("/verifyemail/:token", authController.verifyEmail);
 // @access  Public
 router.post("/login", verifyCaptcha, authController.login);
 
+// @route   POST /api/v1/auth/login/mfa/verify
+// @desc    Verify the MFA token during login
+// @access  Private (requires a temporary MFA token)
+router.post("/login/mfa/verify", authMiddleware, authController.loginVerifyMfa);
+
+// @route   GET /api/v1/auth/refresh
+// @desc    Refresh access token
+// @access  Public (but requires a valid refresh token cookie)
+router.get("/refresh", authController.refreshToken);
+
+// @route   GET /api/v1/auth/logout
+// @desc    Logout user
+// @access  Public
+router.get("/logout", authController.logout);
+
 module.exports = router;

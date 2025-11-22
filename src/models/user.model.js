@@ -49,6 +49,7 @@ const userSchema = new mongoose.Schema(
     },
     emailVerificationToken: String,
     emailVerificationTokenExpires: Date,
+    refreshToken: String,
     attributes: {
       department: {
         type: String,

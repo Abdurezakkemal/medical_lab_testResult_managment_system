@@ -58,7 +58,7 @@ describe("Auth API", () => {
       password: "ValidPassword123!",
     });
     expect(res.statusCode).toEqual(200);
-    expect(res.body).toHaveProperty("token");
+    expect(res.body).toHaveProperty("accessToken");
   });
 
   it("should not login with incorrect credentials", async () => {
