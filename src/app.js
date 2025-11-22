@@ -1,0 +1,20 @@
+const express = require("express");
+const errorHandler = require("./middleware/error.handler");
+const app = express();
+
+// Middleware
+app.use(express.json());
+
+// API Routes
+app.use("/api/v1/auth", require("./api/v1/auth.routes"));
+app.use("/api/v1/users", require("./api/v1/user.routes"));
+app.use("/api/v1/tests", require("./api/v1/test.routes"));
+
+// Basic route
+app.get("/", (req, res) => {
+  res.send("Secure Medical Lab API is running...");
+});
+
+app.use(errorHandler);
+
+module.exports = app;
