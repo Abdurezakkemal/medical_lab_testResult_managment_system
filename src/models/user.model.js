@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema(
     ],
     isActive: {
       type: Boolean,
-      default: false, // Should be activated via email verification
+      default: true,
     },
     isLocked: {
       type: Boolean,
@@ -43,6 +43,12 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationToken: String,
+    emailVerificationTokenExpires: Date,
     attributes: {
       department: {
         type: String,
@@ -58,6 +64,20 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Generate email verification token
+userSchema.methods.generateEmailVerificationToken = function () {
+  const token = require("crypto").randomBytes(20).toString("hex");
+
+  this.emailVerificationToken = require("crypto")
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+  this.emailVerificationTokenExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+  return token;
+};
 
 // Hash password before saving
 userSchema.pre("save", async function () {

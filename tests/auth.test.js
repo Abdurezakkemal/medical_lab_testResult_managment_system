@@ -4,6 +4,15 @@ const mongoose = require("mongoose");
 const User = require("../src/models/user.model");
 const seedRoles = require("../src/config/seed");
 
+jest.mock("../src/services/email.service", () =>
+  jest.fn().mockResolvedValue(true)
+);
+
+jest.mock(
+  "../src/middleware/captcha.middleware",
+  () => (req, res, next) => next()
+);
+
 describe("Auth API", () => {
   beforeAll(async () => {
     await mongoose.connect(process.env.MONGODB_URI);
@@ -19,18 +28,21 @@ describe("Auth API", () => {
     const res = await request(app).post("/api/v1/auth/register").send({
       username: "testuser",
       email: "test@example.com",
-      password: "password123",
+      password: "ValidPassword123!",
       department: "Cardiology",
     });
     expect(res.statusCode).toEqual(201);
-    expect(res.body).toHaveProperty("message", "User registered successfully");
+    expect(res.body).toHaveProperty(
+      "message",
+      "Registration successful. Please check your email to verify your account."
+    );
   });
 
   it("should not register a user with an existing email", async () => {
     const res = await request(app).post("/api/v1/auth/register").send({
       username: "testuser2",
       email: "test@example.com",
-      password: "password123",
+      password: "ValidPassword123!",
       department: "Neurology",
     });
     expect(res.statusCode).toEqual(400);
@@ -38,9 +50,12 @@ describe("Auth API", () => {
   });
 
   it("should login an existing user successfully", async () => {
+    // Manually verify the user for this test
+    await User.updateOne({ email: "test@example.com" }, { isVerified: true });
+
     const res = await request(app).post("/api/v1/auth/login").send({
       email: "test@example.com",
-      password: "password123",
+      password: "ValidPassword123!",
     });
     expect(res.statusCode).toEqual(200);
     expect(res.body).toHaveProperty("token");

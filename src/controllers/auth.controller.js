@@ -4,7 +4,9 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const speakeasy = require("speakeasy");
 const qrcode = require("qrcode");
+const crypto = require("crypto");
 const { logActivity } = require("../services/log.service");
+const sendEmail = require("../services/email.service");
 
 // @desc    Set up MFA for the authenticated user
 exports.setupMfa = async (req, res) => {
@@ -59,6 +61,37 @@ exports.verifyMfa = async (req, res) => {
   }
 };
 
+// @desc    Verify user's email
+exports.verifyEmail = async (req, res) => {
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(req.params.token)
+    .digest("hex");
+
+  try {
+    const user = await User.findOne({
+      emailVerificationToken: hashedToken,
+      emailVerificationTokenExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    user.isVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationTokenExpires = undefined;
+    await user.save();
+
+    logActivity(user.id, "EMAIL_VERIFIED", { email: user.email });
+
+    res.status(200).json({ message: "Email verified successfully." });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send("Server error");
+  }
+};
+
 // @desc    Register a new user
 exports.register = async (req, res) => {
   const { username, email, password, department } = req.body;
@@ -90,10 +123,34 @@ exports.register = async (req, res) => {
     await user.save();
 
     console.log("Step 4: Logging registration event...");
-    await logActivity(user.id, "USER_REGISTER", { email: user.email });
-    console.log("Step 5: Registration complete.");
+    const verificationToken = user.generateEmailVerificationToken();
+    await user.save({ validateBeforeSave: false });
 
-    res.status(201).json({ message: "User registered successfully" });
+    // Send verification email
+    const verificationUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/api/v1/auth/verifyemail/${verificationToken}`;
+    const message = `Please verify your email by clicking on the following link: ${verificationUrl}`;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: "Email Verification",
+        message,
+      });
+
+      console.log("Step 4: Verification email sent.");
+      res.status(201).json({
+        message:
+          "Registration successful. Please check your email to verify your account.",
+      });
+    } catch (err) {
+      console.error(err.message);
+      user.emailVerificationToken = undefined;
+      user.emailVerificationTokenExpires = undefined;
+      await user.save({ validateBeforeSave: false });
+      return res.status(500).send("Email could not be sent.");
+    }
   } catch (error) {
     console.error(error.message);
     res.status(500).send("Server error");
@@ -119,11 +176,9 @@ exports.login = async (req, res) => {
 
     if (user.isLocked) {
       console.log(`[AUTH] Account is locked for ${email}. Denying access.`);
-      return res
-        .status(403)
-        .json({
-          message: "Account is locked. Please contact an administrator.",
-        });
+      return res.status(403).json({
+        message: "Account is locked. Please contact an administrator.",
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -143,11 +198,9 @@ exports.login = async (req, res) => {
       await user.save();
 
       if (user.isLocked) {
-        return res
-          .status(403)
-          .json({
-            message: "Account is locked. Please contact an administrator.",
-          });
+        return res.status(403).json({
+          message: "Account is locked. Please contact an administrator.",
+        });
       }
 
       return res.status(400).json({ message: "Invalid credentials" });
@@ -160,6 +213,13 @@ exports.login = async (req, res) => {
     await user.save();
 
     await logActivity(user.id, "USER_LOGIN", { email: user.email });
+
+    if (!user.isVerified) {
+      console.log(`[AUTH] Email not verified for ${email}. Denying access.`);
+      return res
+        .status(401)
+        .json({ message: "Please verify your email before logging in." });
+    }
 
     const payload = { user: { id: user.id } };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {

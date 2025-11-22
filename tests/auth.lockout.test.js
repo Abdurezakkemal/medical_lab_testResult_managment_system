@@ -3,6 +3,15 @@ const app = require("../src/app");
 const mongoose = require("mongoose");
 const User = require("../src/models/user.model");
 
+jest.mock("../src/services/email.service", () =>
+  jest.fn().mockResolvedValue(true)
+);
+
+jest.mock(
+  "../src/middleware/captcha.middleware",
+  () => (req, res, next) => next()
+);
+
 const TEST_EMAIL = "lockout@example.com";
 
 describe("Auth API - Account Lockout", () => {
@@ -20,7 +29,7 @@ describe("Auth API - Account Lockout", () => {
     await request(app).post("/api/v1/auth/register").send({
       username: "lockoutuser",
       email: TEST_EMAIL,
-      password: "password123",
+      password: "ValidPassword123!",
       department: "Security",
     });
   });
@@ -28,15 +37,10 @@ describe("Auth API - Account Lockout", () => {
   it("should lock the user account in the database after 5 failed login attempts", async () => {
     // 5 failed attempts
     for (let i = 0; i < 5; i++) {
-      const res = await request(app).post("/api/v1/auth/login").send({
+      await request(app).post("/api/v1/auth/login").send({
         email: TEST_EMAIL,
         password: "wrongpassword",
       });
-      console.log(
-        `[TEST] Attempt ${i + 1}: Status ${
-          res.statusCode
-        }, Body: ${JSON.stringify(res.body)}`
-      );
     }
 
     // Verify in the database that the account is marked as locked
@@ -60,7 +64,7 @@ describe("Auth API - Account Lockout", () => {
     // Successful login
     await request(app).post("/api/v1/auth/login").send({
       email: TEST_EMAIL,
-      password: "password123",
+      password: "ValidPassword123!",
     });
 
     const user = await User.findOne({ email: TEST_EMAIL });

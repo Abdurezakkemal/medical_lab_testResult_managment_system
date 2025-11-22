@@ -3,6 +3,15 @@ const app = require("../src/app");
 const mongoose = require("mongoose");
 const User = require("../src/models/user.model");
 
+jest.mock("../src/services/email.service", () =>
+  jest.fn().mockResolvedValue(true)
+);
+
+jest.mock(
+  "../src/middleware/captcha.middleware",
+  () => (req, res, next) => next()
+);
+
 describe("Auth API - Password Policy", () => {
   beforeAll(async () => {
     await mongoose.connect(process.env.MONGODB_URI);
