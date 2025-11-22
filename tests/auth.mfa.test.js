@@ -2,7 +2,10 @@ const request = require("supertest");
 const app = require("../src/app");
 const mongoose = require("mongoose");
 const User = require("../src/models/user.model");
+const Role = require("../src/models/role.model");
 const speakeasy = require("speakeasy");
+const { createUser } = require("./testUtils");
+const sendEmail = require("../src/services/email.service");
 
 jest.mock("../src/services/email.service", () =>
   jest.fn().mockResolvedValue(true)
@@ -28,19 +31,22 @@ describe("Auth API - MFA", () => {
 
   beforeEach(async () => {
     await User.deleteMany({});
-    await request(app).post("/api/v1/auth/register").send({
-      username: "mfauser",
-      email: TEST_EMAIL,
-      password: STRONG_PASSWORD,
-      department: "MFADept",
-    });
-    await User.updateOne({ email: TEST_EMAIL }, { isVerified: true });
+    await Role.deleteMany({});
+    if (sendEmail.mock) {
+      sendEmail.mockClear();
+    }
 
-    const loginRes = await request(app).post("/api/v1/auth/login").send({
-      email: TEST_EMAIL,
-      password: STRONG_PASSWORD,
-    });
-    authToken = loginRes.body.accessToken;
+    // Create a default "Patient" role required for registration
+    await new Role({ name: "Patient" }).save();
+
+    const { user, authToken: token } = await createUser(
+      TEST_EMAIL,
+      STRONG_PASSWORD,
+      "mfauser",
+      "MFADept",
+      ["Patient"]
+    );
+    authToken = token;
   });
 
   it("should set up MFA and return a QR code", async () => {

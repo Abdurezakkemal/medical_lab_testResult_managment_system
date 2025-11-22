@@ -4,9 +4,9 @@ const testController = require("../../controllers/test.controller");
 const authMiddleware = require("../../middleware/auth.middleware");
 const rbacMiddleware = require("../../middleware/rbac.middleware");
 const rubacMiddleware = require("../../middleware/rubac.middleware");
-const macMiddleware = require("../../middleware/mac.middleware");
+// const macMiddleware = require("../../middleware/mac.middleware");
 const abacMiddleware = require("../../middleware/abac.middleware");
-const dacMiddleware = require("../../middleware/dac.middleware");
+// const dacMiddleware = require("../../middleware/dac.middleware");
 
 // @route   POST /api/v1/tests
 // @desc    Create a new test result
@@ -24,8 +24,8 @@ router.post(
 router.get(
   "/:id",
   authMiddleware,
-  macMiddleware,
-  dacMiddleware, // DAC runs before ABAC
+  // macMiddleware,
+  // dacMiddleware, // DAC runs before ABAC
   (req, res, next) => {
     // This function conditionally skips ABAC
     if (req.bypassAbac) {

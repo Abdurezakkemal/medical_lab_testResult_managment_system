@@ -50,6 +50,9 @@ exports.loginVerifyMfa = async (req, res) => {
 
     if (verified) {
       // MFA token is valid, complete the login process
+      user.loginAttempts = 0;
+      await user.save();
+
       const accessToken = jwt.sign(
         { user: { id: user.id } },
         process.env.JWT_SECRET,
@@ -146,13 +149,11 @@ exports.register = async (req, res) => {
   const { username, email, password, department } = req.body;
 
   try {
-    console.log("Step 1: Checking if user exists...");
     let user = await User.findOne({ email });
     if (user) {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    console.log("Step 2: Finding default role...");
     const defaultRole = await Role.findOne({ name: "Patient" });
     if (!defaultRole) {
       // This should not happen if the seeder has run
@@ -168,12 +169,9 @@ exports.register = async (req, res) => {
       roles: [defaultRole._id],
     });
 
-    console.log("Step 3: Saving new user...");
     await user.save();
 
-    console.log("Step 4: Logging registration event...");
     const verificationToken = user.generateEmailVerificationToken();
-    await user.save({ validateBeforeSave: false });
 
     // Send verification email
     const verificationUrl = `${req.protocol}://${req.get(
@@ -188,7 +186,9 @@ exports.register = async (req, res) => {
         message,
       });
 
-      console.log("Step 4: Verification email sent.");
+      // Save user after sending email
+      await user.save({ validateBeforeSave: false });
+
       res.status(201).json({
         message:
           "Registration successful. Please check your email to verify your account.",
@@ -197,7 +197,7 @@ exports.register = async (req, res) => {
       console.error(err.message);
       user.emailVerificationToken = undefined;
       user.emailVerificationTokenExpires = undefined;
-      await user.save({ validateBeforeSave: false });
+      // Don't save user, let the transaction rollback or handle as needed
       return res.status(500).send("Email could not be sent.");
     }
   } catch (error) {
@@ -268,36 +268,30 @@ exports.login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    console.log(`[AUTH] Attempting login for ${email}.`);
     const user = await User.findOne({ email });
 
     if (!user) {
-      console.log(`[AUTH] User not found: ${email}.`);
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    console.log(
-      `[AUTH] User found. isLocked: ${user.isLocked}, Attempts: ${user.loginAttempts}`
-    );
-
     if (user.isLocked) {
-      console.log(`[AUTH] Account is locked for ${email}. Denying access.`);
       return res.status(403).json({
         message: "Account is locked. Please contact an administrator.",
+      });
+    }
+
+    if (!user.isVerified) {
+      return res.status(401).json({
+        message: "Account not verified. Please check your email.",
       });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      console.log(`[AUTH] Password mismatch for ${email}.`);
       user.loginAttempts = (user.loginAttempts || 0) + 1;
-      console.log(
-        `[AUTH] Incremented login attempts to ${user.loginAttempts} for ${email}.`
-      );
 
       if (user.loginAttempts >= 5) {
-        console.log(`[AUTH] Locking account for ${email}.`);
         user.isLocked = true;
       }
 
@@ -312,9 +306,6 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    console.log(
-      `[AUTH] Password match for ${email}. Resetting login attempts.`
-    );
     user.loginAttempts = 0;
     await user.save();
 

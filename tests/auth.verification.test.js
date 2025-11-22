@@ -2,7 +2,8 @@ const request = require("supertest");
 const app = require("../src/app");
 const mongoose = require("mongoose");
 const User = require("../src/models/user.model");
-const crypto = require("crypto");
+const Role = require("../src/models/role.model");
+const sendEmail = require("../src/services/email.service");
 
 jest.mock("../src/services/email.service", () =>
   jest.fn().mockResolvedValue(true)
@@ -28,6 +29,13 @@ describe("Auth API - Email Verification", () => {
 
   beforeEach(async () => {
     await User.deleteMany({});
+    await Role.deleteMany({});
+    if (jest.mocked(sendEmail).mock) {
+      jest.mocked(sendEmail).mockClear();
+    }
+
+    // Create a default "Patient" role required for registration
+    await new Role({ name: "Patient" }).save();
   });
 
   it("should register a new user as unverified", async () => {
@@ -47,7 +55,7 @@ describe("Auth API - Email Verification", () => {
       username: "verifyuser",
       email: TEST_EMAIL,
       password: STRONG_PASSWORD,
-      department: "Verification",
+      department: "VerifyDept",
     });
 
     const res = await request(app).post("/api/v1/auth/login").send({
@@ -59,20 +67,28 @@ describe("Auth API - Email Verification", () => {
   });
 
   it("should verify a user with a valid token", async () => {
-    const registerRes = await request(app).post("/api/v1/auth/register").send({
+    await request(app).post("/api/v1/auth/register").send({
       username: "verifyuser",
       email: TEST_EMAIL,
       password: STRONG_PASSWORD,
-      department: "Verification",
+      department: "VerifyDept",
     });
 
-    const user = await User.findOne({ email: TEST_EMAIL });
-    const token = user.generateEmailVerificationToken();
-    await user.save();
+    const emailMock = jest.mocked(sendEmail);
+    const lastCall =
+      emailMock.mock && emailMock.mock.calls.length > 0
+        ? emailMock.mock.calls[emailMock.mock.calls.length - 1]
+        : null;
 
-    const res = await request(app).get(`/api/v1/auth/verifyemail/${token}`);
+    const message = lastCall && lastCall[0] && lastCall[0].message;
+    const match = message && message.match(/\/verifyemail\/([a-f0-9]+)/i);
+    const verificationToken = match && match[1];
+
+    const res = await request(app).get(
+      `/api/v1/auth/verifyemail/${verificationToken}`
+    );
+
     expect(res.statusCode).toEqual(200);
-
     const updatedUser = await User.findOne({ email: TEST_EMAIL });
     expect(updatedUser.isVerified).toBe(true);
   });
@@ -82,14 +98,20 @@ describe("Auth API - Email Verification", () => {
       username: "verifyuser",
       email: TEST_EMAIL,
       password: STRONG_PASSWORD,
-      department: "Verification",
+      department: "VerifyDept",
     });
 
-    const user = await User.findOne({ email: TEST_EMAIL });
-    const token = user.generateEmailVerificationToken();
-    await user.save();
+    const emailMock = jest.mocked(sendEmail);
+    const lastCall =
+      emailMock.mock && emailMock.mock.calls.length > 0
+        ? emailMock.mock.calls[emailMock.mock.calls.length - 1]
+        : null;
 
-    await request(app).get(`/api/v1/auth/verifyemail/${token}`);
+    const message = lastCall && lastCall[0] && lastCall[0].message;
+    const match = message && message.match(/\/verifyemail\/([a-f0-9]+)/i);
+    const verificationToken = match && match[1];
+
+    await request(app).get(`/api/v1/auth/verifyemail/${verificationToken}`);
 
     const res = await request(app).post("/api/v1/auth/login").send({
       email: TEST_EMAIL,

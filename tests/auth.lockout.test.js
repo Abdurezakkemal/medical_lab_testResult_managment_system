@@ -2,6 +2,8 @@ const request = require("supertest");
 const app = require("../src/app");
 const mongoose = require("mongoose");
 const User = require("../src/models/user.model");
+const Role = require("../src/models/role.model");
+const { createUser } = require("./testUtils");
 
 jest.mock("../src/services/email.service", () =>
   jest.fn().mockResolvedValue(true)
@@ -13,6 +15,7 @@ jest.mock(
 );
 
 const TEST_EMAIL = "lockout@example.com";
+const STRONG_PASSWORD = "ValidPassword123!";
 
 describe("Auth API - Account Lockout", () => {
   beforeAll(async () => {
@@ -26,12 +29,18 @@ describe("Auth API - Account Lockout", () => {
 
   beforeEach(async () => {
     await User.deleteMany({});
-    await request(app).post("/api/v1/auth/register").send({
-      username: "lockoutuser",
-      email: TEST_EMAIL,
-      password: "ValidPassword123!",
-      department: "Security",
-    });
+    await Role.deleteMany({});
+
+    // Create a default "Patient" role required for registration
+    await new Role({ name: "Patient" }).save();
+
+    await createUser(
+      TEST_EMAIL,
+      STRONG_PASSWORD,
+      "lockoutuser",
+      "LockoutDept",
+      ["Patient"]
+    );
   });
 
   it("should lock the user account in the database after 5 failed login attempts", async () => {
@@ -64,7 +73,7 @@ describe("Auth API - Account Lockout", () => {
     // Successful login
     await request(app).post("/api/v1/auth/login").send({
       email: TEST_EMAIL,
-      password: "ValidPassword123!",
+      password: STRONG_PASSWORD,
     });
 
     const user = await User.findOne({ email: TEST_EMAIL });

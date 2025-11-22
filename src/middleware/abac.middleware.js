@@ -25,8 +25,8 @@ const abacMiddleware = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error(error.message);
-    res.status(500).send("Server error");
+    console.error("ABAC error:", error.message);
+    res.status(500).send("Server error during attribute verification");
   }
 };
 

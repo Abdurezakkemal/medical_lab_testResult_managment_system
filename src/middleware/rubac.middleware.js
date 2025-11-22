@@ -12,18 +12,19 @@ const rubacMiddleware = async (req, res, next) => {
 
     if (isLabTech) {
       const currentHour = new Date().getHours();
-      // Rule: Deny access between 10 PM (22) and 6 AM (06)
-      if (currentHour >= 22 || currentHour < 6) {
-        return res
-          .status(403)
-          .json({
-            message:
-              "Forbidden: Access is restricted during non-working hours.",
-          });
+      // Rule: Deny access outside of 9 AM (09) to 5 PM (17)
+      if (currentHour < 9 || currentHour >= 17) {
+        return res.status(403).json({
+          message: "Forbidden: Access is restricted during non-working hours.",
+        });
+      } else {
+        // Allow access during working hours
+        next();
       }
+    } else {
+      // Non-Lab Tech users are not affected by this middleware
+      next();
     }
-
-    next();
   } catch (error) {
     console.error(error.message);
     res.status(500).send("Server error");
