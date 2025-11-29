@@ -93,7 +93,15 @@ exports.getTestResult = async (req, res) => {
 // @desc    Get all test results (Admin only via RBAC)
 exports.getAllTestResults = async (req, res) => {
   try {
-    const results = await TestResult.find();
+    let query = {};
+    if (req.query.owner) {
+      query.owner = req.query.owner;
+    }
+    if (req.query.patientId) {
+      query.patientId = req.query.patientId;
+    }
+
+    const results = await TestResult.find(query);
     if (req.user && req.user.id) {
       await logRequestActivity(req, req.user.id, "VIEW_ALL_TEST_RESULTS", {
         count: results.length,

@@ -4,7 +4,16 @@ const errorHandler = require("./middleware/error.handler");
 const cookieParser = require("cookie-parser");
 const securityMiddleware = require("./middleware/security.middleware");
 const enforceHttps = require("./middleware/https.middleware");
+const cors = require("cors");
 const app = express();
+
+// CORS configuration
+const corsOptions = {
+  origin: "http://localhost:5173",
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 
 // Middleware
 app.set("trust proxy", 1);

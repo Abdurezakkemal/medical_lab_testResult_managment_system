@@ -168,13 +168,31 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    let defaultRole = await Role.findOne({ name: "Patient" });
+    let roleName;
+    switch (department) {
+      case "Admin":
+        roleName = "Admin";
+        break;
+      case "Doctor":
+        roleName = "Doctor";
+        break;
+      case "LabTech":
+        roleName = "Lab Tech";
+        break;
+      default:
+        roleName = "Patient";
+    }
+
+    let defaultRole = await Role.findOne({ name: roleName });
     if (!defaultRole) {
-      // This should not happen if the seeder has run
-      defaultRole = await Role.create({
-        name: "Patient",
-        permissions: ["read_own_data"],
-      });
+      // Fallback to Patient role if specific role is missing
+      defaultRole = await Role.findOne({ name: "Patient" });
+      if (!defaultRole) {
+        defaultRole = await Role.create({
+          name: "Patient",
+          permissions: ["read_own_data"],
+        });
+      }
     }
 
     // Create new user
@@ -184,6 +202,7 @@ exports.register = async (req, res) => {
       password,
       attributes: { department },
       roles: [defaultRole._id],
+      clearanceLevel: 0,
     });
 
     await user.save();
@@ -338,13 +357,24 @@ exports.login = async (req, res) => {
       email: user.email,
     });
 
+    await user.populate("roles");
+    const userResponse = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      roles: user.roles.map((role) => role.name),
+      attributes: user.attributes,
+    };
+
     if (user.mfaEnabled) {
       const mfaToken = jwt.sign(
         { user: { id: user.id, mfa: "pending" } },
         process.env.JWT_SECRET,
         { expiresIn: "10m" }
       );
-      return res.status(200).json({ mfaRequired: true, mfaToken });
+      return res
+        .status(200)
+        .json({ mfaRequired: true, mfaToken, user: userResponse });
     }
 
     const accessToken = jwt.sign(
@@ -368,7 +398,7 @@ exports.login = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    res.status(200).json({ accessToken });
+    res.status(200).json({ accessToken, user: userResponse });
   } catch (error) {
     console.error(error.message);
     res.status(500).send("Server error");

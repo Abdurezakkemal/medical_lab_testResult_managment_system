@@ -22,22 +22,17 @@ router.post("/mfa/verify", authMiddleware, authController.verifyMfa);
 // @route   POST /api/v1/auth/register
 // @desc    Register a new user
 // @access  Public
-router.post(
-  "/register",
-  verifyCaptcha,
-  validate(registerSchema),
-  authController.register
-);
+router.post("/register", validate(registerSchema), authController.register);
 
 // @route   GET /api/v1/auth/verifyemail/:token
 // @desc    Verify user's email
-// @access  Public
+// @access  Publics
 router.get("/verifyemail/:token", authController.verifyEmail);
 
 // @route   POST /api/v1/auth/login
 // @desc    Authenticate user & get token
 // @access  Public
-router.post("/login", verifyCaptcha, authController.login);
+router.post("/login", authController.login);
 
 // @route   POST /api/v1/auth/change-password
 // @desc    Change password for the authenticated user

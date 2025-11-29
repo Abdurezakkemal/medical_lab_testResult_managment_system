@@ -7,18 +7,6 @@ const ipRequests = new Map();
 const allowedOrigin = process.env.CORS_ORIGIN || "*";
 
 module.exports = (req, res, next) => {
-  // CORS headers
-  res.header("Access-Control-Allow-Origin", allowedOrigin);
-  res.header(
-    "Access-Control-Allow-Methods",
-    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-  );
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  res.header("Access-Control-Allow-Credentials", "true");
-
   // Security headers
   res.header("X-Content-Type-Options", "nosniff");
   res.header("X-Frame-Options", "DENY");
@@ -27,7 +15,7 @@ module.exports = (req, res, next) => {
   res.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
   res.header(
     "Content-Security-Policy",
-    "default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+    "default-src 'self'; connect-src 'self' http://localhost:5173; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
   );
 
   // Handle preflight requests quickly

@@ -87,7 +87,6 @@ router.post(
   "/upload",
   authMiddleware,
   rbacMiddleware(["upload_results"]),
-  rubacMiddleware,
   testController.uploadResult
 );
 
